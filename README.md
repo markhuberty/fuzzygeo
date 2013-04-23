@@ -10,22 +10,21 @@ Use
 
     import pandas as pd
     import fuzzygeo
-    import fuzzy
     
     # Assumes city_db has columns city, lat, lng
     city_db = pd.read_csv('city_database.csv')
-    addresses = pd.read_csv('address_db.csv')
     
-    geocoder = fuzzygeo(city_db, hash_length=3)
+    geocoder = fuzzygeo.fuzzygeo(city_db, hash_length=3)
     
-    geocoded_addresses = [geocoder(addr, threshold=0.9) for addr in addresses.address]
+    address = '1234 n. clark chicago il'
+    geocoded_address = geocoder(address, threshold=0.75)
 
 
 Depends
 -----
 
 - [`pandas`](pandas.pydata.org)
-- [`pylevenstein](http://code.google.com/p/pylevenshtein)
+- [`pylevenstein`](http://code.google.com/p/pylevenshtein)
 - [`fuzzy`](https://pypi.python.org/pypi/Fuzzy)
 - [`numpy`](http://www.numpy.org/)
     
