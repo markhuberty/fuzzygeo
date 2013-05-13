@@ -19,10 +19,12 @@ class fuzzygeo:
     """
     Implements a fuzzy geographic search from an entity database; returns
     the matched city, latitude, and longitude.
+            
+    city_df should be a pandas dataframe with the following columns:
+    country, region, city, population, lat, lng
 
-    city_df should be a pandas dataframe of form city:lat:lng.
-    hash_length defines the length of a Metaphone phonetic hash. Longer hashes will trade recall
-      for precision. 
+    hash_length defines the length of a Metaphone phonetic hash.
+    Longer hashes will trade recall for precision. 
     
     Usage:
     import fuzzygeo
@@ -33,20 +35,19 @@ class fuzzygeo:
         self.hashfun = fuzzy.DMetaphone(hash_length)
         self.city_df = city_df
         self.city_df['city_hash'] = [self.hashfun(c)[0] for c in self.city_df.city]
-        
 
-    def geocoder(self, addr, threshold):
+        if 'us' in city_df.country.values:
+            self.states = city_df[city_df.country=='us'].region.drop_duplicates()
+            self.states = [s.lower() for s in self.states]
+        
+    def geocoder(self, addr, country, threshold):
         """
         Checks for a city name in an address. If the city is found (defined as
-        found with a levenshtein ratio > j_threshold), returns city and lat/long.
-        
-        city_df should be a pandas dataframe of form
-        city / city_hash / lat / lng. city and address should be case-aligned.
-    
-        The city hash should be generated from the same hash function that is passed
-        as hashfun.
+        found with a levenshtein ratio > threshold), returns city and lat/long.
         
         """
+
+        region_df = self.city_df[self.city_df.country==country]
 
         addr = re.sub('^[0-9]+|[0-9]+$', '', addr)
         split_addr = re.split('[0-9]+', addr, maxsplit=1)
@@ -58,9 +59,18 @@ class fuzzygeo:
         addr_candidates = city_chunk.split(' ')
         hashed_addr = [self.hashfun(w)[0] for w in addr_candidates]
 
-        sub_df = self.city_df[self.city_df.city_hash.isin(hashed_addr)]
+        sub_df = region_df[region_df.city_hash.isin(hashed_addr)]
         
-        
+        # If the country is American, subset by state
+        if country=='us':
+            this_state = self.id_state(city_chunk)
+            
+            city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', city_chunk)
+
+            if this_state:
+                sub_df = sub_df[sub_df.region==this_state]
+        print sub_df.shape
+                
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
                                           sub_df.population.values,
@@ -70,8 +80,8 @@ class fuzzygeo:
 
             if city_match:
                 out = [city_match,
-                       self.city_df.lat[self.city_df.city==city_match].values[0],
-                       self.city_df.lng[self.city_df.city==city_match].values[0]
+                       sub_df.lat[sub_df.city==city_match].values[0],
+                       sub_df.lng[sub_df.city==city_match].values[0]
                        ]
             else:
                 out = [None] * 3
@@ -113,8 +123,22 @@ class fuzzygeo:
         else:
             return None
 
-    def __call__(self, addr, threshold):
-        out = self.geocoder(addr, threshold)
+    def is_us(self, addr_string):
+        """
+        Looks for the US state in the latter half of the string.
+        Returns TRUE if found
+        """
+        addr_split = addr_string.split(' ')
+        has_state = [True if chunk in self.states else False for chunk in addr_split]
+        is_state = any(has_state)
+        return is_state
+
+    def id_state(self, addr_string):
+        potential_states = [s for s in self.states if re.search('\s' + s + '\s{0,}$', addr_string)]
+        return potential_states[0]
+
+    def __call__(self, addr, country, threshold):
+        out = self.geocoder(addr, country, threshold)
         return out
         
         
