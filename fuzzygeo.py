@@ -49,8 +49,12 @@ class fuzzygeo:
         """
 
         addr = re.sub('^[0-9]+|[0-9]+$', '', addr)
-        split_addr = re.split('[0-9]+', addr)
-        city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
+        split_addr = re.split('[0-9]+', addr, maxsplit=1)
+        if isinstance(split_addr, str):
+            city_chunk = re.sub('[0-9]+', '', split_addr).strip()
+        else:
+            city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
+        # print city_chunk
         addr_candidates = city_chunk.split(' ')
         hashed_addr = [self.hashfun(w)[0] for w in addr_candidates]
 
@@ -59,6 +63,7 @@ class fuzzygeo:
         
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
+                                          sub_df.population.values,
                                           city_chunk,
                                           threshold
                                           )
@@ -74,10 +79,36 @@ class fuzzygeo:
             out = [None] * 3
         return out
 
-    def search_city(self, cities, addr_string, threshold):
-        sims = [Levenshtein.ratio(addr_string, c) for c in cities]
-        max_idx = np.argmax(sims)
-        if sims[max_idx] >= threshold:
+    def search_city(self, cities, pops, addr_string, threshold):
+        """
+        Searches the address string for potential city matches
+        Takes the best match; if more than one match is returned,
+        sorts by (1) position in string, (2) match quality, (3) population
+        to disambiguate
+        """
+        # Here, search for each city in address ngrams
+        # of length equal to that of the city name
+        potential_matches = []
+        for c, p in zip(cities, pops):
+            city_ngram = len(c.split(' '))
+            addr_split = addr_string.split(' ')
+            addr_ngrams = [' '.join(addr_split[i:(i + city_ngram)]) for i in range(len(addr_split))]
+            ngrams, sims = zip(*[(ngram,Levenshtein.ratio(ngram, c)) for ngram in addr_ngrams])
+            max_idx = np.argmax(sims)
+            if sims[max_idx] >= threshold:
+                print ngrams[max_idx]
+                print addr_string
+                match_idx = re.search(ngrams[max_idx], addr_string).end()
+                profile = (c, match_idx, sims[max_idx], p)
+                potential_matches.append(profile)
+
+                
+        if len(potential_matches) > 1:
+            print potential_matches
+            sorted_by = sorted(potential_matches, key=lambda k: (k[1], k[2], k[3]))
+            return sorted_by[-1][0]
+        elif len(potential_matches) == 1:
+            return potential_matches[0][0]
             return cities[max_idx]
         else:
             return None
