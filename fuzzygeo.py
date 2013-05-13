@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import re
 import time
+import itertools as it
 
 
 class fuzzygeo:
@@ -34,8 +35,9 @@ class fuzzygeo:
     def __init__(self, city_df, hash_length):
         self.hashfun = fuzzy.DMetaphone(hash_length)
         self.city_df = city_df.set_index('country')
-        self.city_df['city_hash'] = [self.hashfun(c)[0] for c in self.city_df.city]
-        #self.city_df.set_index('country', inplace=True)
+        self.city_df['city_hash'] = [c[0] for c in self.city_df.city]
+        #self.city_df['city_hash'] = [self.hashfun(c)[0] for c in self.city_df.city]
+        self.city_ngram = [len(c.split(' ')) for c in self.city_df.city]
 
         if 'us' in self.city_df.index:
             self.states = self.city_df.ix['us'].region.drop_duplicates()
@@ -60,9 +62,10 @@ class fuzzygeo:
             city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
         # print city_chunk
         addr_candidates = city_chunk.split(' ')
-        hashed_addr = [self.hashfun(w)[0] for w in addr_candidates]
+        hashed_addr = [w[0] for w in addr_candidates]
 
         sub_df = region_df[region_df.city_hash.isin(hashed_addr)]
+        #sub_df = region_df
         
         # If the country is American, subset by state
         if country=='us':
@@ -91,6 +94,21 @@ class fuzzygeo:
             out = [None] * 3
         return out
 
+    def find_potential_match(self, addr_split, addr, c, p, t):
+        city_ngram = len(c.split(' '))
+        addr_ngrams = [' '.join(addr_split[i:(i + city_ngram)]) for i in range(len(addr_split))]
+        sims = np.fromiter([Levenshtein.ratio(ngram, c) for ngram in addr_ngrams],
+                           float,
+                           len(addr_ngrams)
+                           )
+        max_idx = np.argmax(sims)
+        if sims[max_idx] >= t:
+            match_idx = re.search(addr_ngrams[max_idx], addr).end()
+            profile = (c, match_idx, sims[max_idx], p)
+            return profile
+        return None
+
+
     def search_city(self, cities, pops, addr_string, threshold):
         """
         Searches the address string for potential city matches
@@ -100,17 +118,23 @@ class fuzzygeo:
         """
         # Here, search for each city in address ngrams
         # of length equal to that of the city name
-        potential_matches = []
-        for c, p in zip(cities, pops):
-            city_ngram = len(c.split(' '))
-            addr_split = addr_string.split(' ')
-            addr_ngrams = [' '.join(addr_split[i:(i + city_ngram)]) for i in range(len(addr_split))]
-            ngrams, sims = zip(*[(ngram,Levenshtein.ratio(ngram, c)) for ngram in addr_ngrams])
-            max_idx = np.argmax(sims)
-            if sims[max_idx] >= threshold:
-                match_idx = re.search(ngrams[max_idx], addr_string).end()
-                profile = (c, match_idx, sims[max_idx], p)
-                potential_matches.append(profile)
+        addr_split = addr_string.split(' ')
+        potential_matches = [self.find_potential_match(addr_split, addr_string, c, p, threshold)
+                             for c,p in it.izip(cities, pops)
+                             if self.find_potential_match(addr_split, addr_string, c, p, threshold)
+                             ]
+
+        # potential_matches = []
+        # for c, p in zip(cities, pops):
+        #     city_ngram = len(c.split(' '))
+        #     addr_split = addr_string.split(' ')
+        #     addr_ngrams = [' '.join(addr_split[i:(i + city_ngram)]) for i in range(len(addr_split))]
+        #     sims = [Levenshtein.ratio(ngram, c) for ngram in addr_ngrams]
+        #     max_idx = np.argmax(sims)
+        #     if sims[max_idx] >= threshold:
+        #         match_idx = re.search(addr_ngrams[max_idx], addr_string).end()
+        #         profile = (c, match_idx, sims[max_idx], p)
+        #         potential_matches.append(profile)
 
                 
         if len(potential_matches) > 1:
