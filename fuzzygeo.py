@@ -3,12 +3,9 @@
 # Begun: 18 April 2013
 # Purpose: given a list of addresses and dict of possible cities for those addresses,
 # geocode at the city level for those addresses
-# Does both exact and fuzzy checks for city matches to handle misspellings.
-# The fuzzy matches require a hash function to hash the city names first, so that
-# the comparison set is smaller. The dmetaphone hash is recommended
 
 import Levenshtein
-import fuzzy
+# import fuzzy
 import numpy as np
 import pandas as pd
 import re
@@ -32,11 +29,10 @@ class fuzzygeo:
     geocoder = fuzzygeo.fuzzygeo(city_df=cities, hash_length=3)
     latlng = geocoder(address)
     """
-    def __init__(self, city_df, hash_length):
+    def __init__(self, city_df):
         self.hashfun = fuzzy.DMetaphone(hash_length)
         self.city_df = city_df.set_index('country')
         self.city_df['city_hash'] = [c[0] for c in self.city_df.city]
-        #self.city_df['city_hash'] = [self.hashfun(c)[0] for c in self.city_df.city]
         self.city_ngram = [len(c.split(' ')) for c in self.city_df.city]
 
         if 'us' in self.city_df.index:
@@ -67,15 +63,14 @@ class fuzzygeo:
         sub_df = region_df[region_df.city_hash.isin(hashed_addr)]
         #sub_df = region_df
         
-        # If the country is American, subset by state
+        # If the country is United States, subset by state
         if country=='us':
             this_state = self.id_state(city_chunk)
-            
-            city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', city_chunk)
 
             if this_state:
                 sub_df = sub_df[sub_df.region.isin([this_state])]
-                        
+                city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', city_chunk)
+
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
                                           sub_df.population.values,
@@ -88,11 +83,9 @@ class fuzzygeo:
                        sub_df.lat[sub_df.city.isin([city_match])].values[0],
                        sub_df.lng[sub_df.city.isin([city_match])].values[0]
                        ]
-            else:
-                out = [None] * 3
-        else:
-            out = [None] * 3
-        return out
+                return out
+            
+        return [None * 3]
 
     def find_potential_match(self, addr_split, addr, c, p, t):
         city_ngram = len(c.split(' '))
