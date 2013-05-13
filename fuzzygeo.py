@@ -33,11 +33,12 @@ class fuzzygeo:
     """
     def __init__(self, city_df, hash_length):
         self.hashfun = fuzzy.DMetaphone(hash_length)
-        self.city_df = city_df
+        self.city_df = city_df.set_index('country')
         self.city_df['city_hash'] = [self.hashfun(c)[0] for c in self.city_df.city]
+        #self.city_df.set_index('country', inplace=True)
 
-        if 'us' in city_df.country.values:
-            self.states = city_df[city_df.country=='us'].region.drop_duplicates()
+        if 'us' in self.city_df.index:
+            self.states = self.city_df.ix['us'].region.drop_duplicates()
             self.states = [s.lower() for s in self.states]
         
     def geocoder(self, addr, country, threshold):
@@ -46,8 +47,10 @@ class fuzzygeo:
         found with a levenshtein ratio > threshold), returns city and lat/long.
         
         """
-
-        region_df = self.city_df[self.city_df.country==country]
+        try: 
+            region_df = self.city_df.ix[country]
+        except:
+            return '%s not a country in the database' % country
 
         addr = re.sub('^[0-9]+|[0-9]+$', '', addr)
         split_addr = re.split('[0-9]+', addr, maxsplit=1)
@@ -68,9 +71,8 @@ class fuzzygeo:
             city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', city_chunk)
 
             if this_state:
-                sub_df = sub_df[sub_df.region==this_state]
-        print sub_df.shape
-                
+                sub_df = sub_df[sub_df.region.isin([this_state])]
+                        
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
                                           sub_df.population.values,
@@ -80,8 +82,8 @@ class fuzzygeo:
 
             if city_match:
                 out = [city_match,
-                       sub_df.lat[sub_df.city==city_match].values[0],
-                       sub_df.lng[sub_df.city==city_match].values[0]
+                       sub_df.lat[sub_df.city.isin([city_match])].values[0],
+                       sub_df.lng[sub_df.city.isin([city_match])].values[0]
                        ]
             else:
                 out = [None] * 3
@@ -106,20 +108,16 @@ class fuzzygeo:
             ngrams, sims = zip(*[(ngram,Levenshtein.ratio(ngram, c)) for ngram in addr_ngrams])
             max_idx = np.argmax(sims)
             if sims[max_idx] >= threshold:
-                print ngrams[max_idx]
-                print addr_string
                 match_idx = re.search(ngrams[max_idx], addr_string).end()
                 profile = (c, match_idx, sims[max_idx], p)
                 potential_matches.append(profile)
 
                 
         if len(potential_matches) > 1:
-            print potential_matches
             sorted_by = sorted(potential_matches, key=lambda k: (k[1], k[2], k[3]))
             return sorted_by[-1][0]
         elif len(potential_matches) == 1:
             return potential_matches[0][0]
-            return cities[max_idx]
         else:
             return None
 
