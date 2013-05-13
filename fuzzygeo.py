@@ -43,9 +43,6 @@ class fuzzygeo:
         city_df should be a pandas dataframe of form
         city / city_hash / lat / lng. city and address should be case-aligned.
     
-        The city hash should be generated from the same hash function that is passed
-        as hashfun.
-        
         """
 
         addr = re.sub('^[0-9]+|[0-9]+$', '', addr)
