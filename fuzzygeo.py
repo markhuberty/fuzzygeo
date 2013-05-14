@@ -30,7 +30,7 @@ class fuzzygeo:
     latlng = geocoder(address)
     """
     def __init__(self, city_df):
-        self.hashfun = fuzzy.DMetaphone(hash_length)
+
         self.city_df = city_df.set_index('country')
         self.city_df['city_hash'] = [c[0] for c in self.city_df.city]
         self.city_ngram = [len(c.split(' ')) for c in self.city_df.city]
