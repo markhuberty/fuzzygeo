@@ -51,12 +51,13 @@ class fuzzygeo:
         except:
             return '%s not a country in the database' % country
 
-        addr = re.sub('^[0-9]+|[0-9]+$', '', addr)
+        addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
         split_addr = re.split('[0-9]+', addr, maxsplit=1)
         if isinstance(split_addr, str):
             city_chunk = re.sub('[0-9]+', '', split_addr).strip()
         else:
             city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
+        city_chunk = re.sub('\s{2,}', ' ', city_chunk)
         # print city_chunk
         addr_candidates = city_chunk.split(' ')
         hashed_addr = [w[0] for w in addr_candidates]
@@ -86,7 +87,7 @@ class fuzzygeo:
                        ]
                 return out
             
-        return [None * 3]
+        return [None] * 3
 
     def find_potential_match(self, addr_split, addr, c, p, t):
         city_ngram = len(c.split(' '))
