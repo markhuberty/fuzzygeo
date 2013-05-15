@@ -103,7 +103,26 @@ class fuzzygeo:
             match_idx = re.search(addr_ngrams[max_idx], addr).end()
             profile = (c, match_idx, sims[max_idx], p)
             return profile
-        return None
+        else:
+            return None
+
+    def find_exact_match(self, addr, cities, pops):
+        matches = []
+        for c, p in it.izip(cities, pops):
+            if c == addr:
+                return c
+            else:
+                m = re.search('\s%s(\s|$)' % c, addr)
+                if m:
+                    matches.append((c, p, m.end()))
+
+        if len(matches) > 1:
+            sorted_matches = sorted(matches, key=lambda k: (k[1], k[2]))
+            return sorted_matches[-1][0]
+        elif len(matches) == 1:
+            return matches[0][0]
+        else:
+            return None
 
 
     def search_city(self, cities, pops, addr_string, threshold):
@@ -115,6 +134,12 @@ class fuzzygeo:
         """
         # Here, search for each city in address ngrams
         # of length equal to that of the city name
+
+        exact_match = self.find_exact_match(addr_string, cities, pops)
+
+        if exact_match:
+            return exact_match
+        
         addr_split = addr_string.split(' ')
         potential_matches = [self.find_potential_match(addr_split, addr_string, c, p, threshold)
                              for c,p in it.izip(cities, pops)
