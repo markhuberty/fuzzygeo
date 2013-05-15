@@ -51,8 +51,10 @@ class fuzzygeo:
         except:
             return '%s not a country in the database' % country
 
-        addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
-        split_addr = re.split('[0-9]+', addr, maxsplit=1)
+        addr = re.sub('[0-9]+', '', addr).strip()
+        split_addr = re.split('\s+', addr)
+        #addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
+        #split_addr = re.split('[0-9]+', addr, maxsplit=1)
         if isinstance(split_addr, str):
             city_chunk = re.sub('[0-9]+', '', split_addr).strip()
         else:
