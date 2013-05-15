@@ -5,12 +5,11 @@
 # geocode at the city level for those addresses
 
 import Levenshtein
-# import fuzzy
+import itertools as it
 import numpy as np
 import pandas as pd
 import re
 import time
-import itertools as it
 
 re_numbers = re.compile('[0-9]+')
 re_multispace = re.compile('\s+')
@@ -35,7 +34,7 @@ class fuzzygeo:
 
         self.city_df = city_df.set_index('country')
         self.city_df['city_hash'] = [c[0] for c in self.city_df.city]
-        self.city_ngram = [len(c.split(' ')) for c in self.city_df.city]
+        self.city_df['city_ngram'] = [len(c.split(' ')) for c in self.city_df.city]
 
         if 'us' in self.city_df.index:
             self.states = self.city_df.ix['us'].region.drop_duplicates()
@@ -56,7 +55,7 @@ class fuzzygeo:
         except:
             return '%s not a country in the database' % country
 
-        addr = re_numers.sub(addr).strip()
+        addr = re_numbers.sub('', addr).strip()
         split_addr = re_multispace.split(addr)
         #addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
         #split_addr = re.split('[0-9]+', addr, maxsplit=1)
@@ -68,22 +67,24 @@ class fuzzygeo:
         # print city_chunk
         addr_candidates = split_addr #city_chunk.split(' ')
         hashed_addr = [w[0] for w in addr_candidates]
+        bool_addr = region_df.city_hash.isin(hashed_addr)
 
-        sub_df = region_df[region_df.city_hash.isin(hashed_addr)]
+        sub_df = region_df[bool_addr]
+
         #sub_df = region_df
         
         # If the country is United States, subset by state
+        city_chunk = addr
         if country=='us':
             this_state = self.id_state(addr)
 
             if this_state:
-                sub_df = sub_df[sub_df.region.isin([this_state])]
+                sub_df = sub_df[sub_df.region == this_state]
                 city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', addr)
-            else:
-                city_chunk = addr
 
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
+                                          sub_df.city_ngram,
                                           sub_df.population.values,
                                           city_chunk,
                                           threshold
@@ -91,16 +92,15 @@ class fuzzygeo:
 
             if city_match:
                 out = [city_match,
-                       sub_df.lat[sub_df.city.isin([city_match])].values[0],
-                       sub_df.lng[sub_df.city.isin([city_match])].values[0]
+                       sub_df.lat[sub_df.city==city_match].values[0],
+                       sub_df.lng[sub_df.city==city_match].values[0]
                        ]
                 return out
             
         return [None] * 3
 
-    def find_potential_match(self, addr_split, addr, c, p, t):
-        city_ngram = len(c.split(' '))
-        addr_ngrams = [' '.join(addr_split[i:(i + city_ngram)]) for i in range(len(addr_split))]
+    def find_potential_match(self, addr_ngrams, addr, c, cn, p, t):
+
         sims = np.fromiter([Levenshtein.ratio(ngram, c) for ngram in addr_ngrams],
                            float,
                            len(addr_ngrams)
@@ -114,16 +114,16 @@ class fuzzygeo:
             return None
 
     def find_exact_match(self, addr, cities, pops):
-        print addr
+
         matches = []
         for c, p in it.izip(cities, pops):
             if c == addr:
                 return c
             else:
-                m = re.search('\s%s(\s|$)' % c, addr)
-                if m:
-                    matches.append((c, p, m.end()))
-        print matches
+                _c = ' ' + c
+                if _c in addr:
+                    matches.append((c, p, re.search(_c, addr).end()))
+
         if len(matches) > 1:
             sorted_matches = sorted(matches, key=lambda k: (k[1], k[2]))
             return sorted_matches[-1][0]
@@ -132,8 +132,11 @@ class fuzzygeo:
         else:
             return None
 
+    def compute_address_ngrams(self, addr_split, n):
+        ngrams = [' '.join(addr_split[i:i+n]) for i in range(len(addr_split))]
+        return ngrams
 
-    def search_city(self, cities, pops, addr_string, threshold):
+    def search_city(self, cities, ngrams, pops, addr_string, threshold):
         """
         Searches the address string for potential city matches
         Takes the best match; if more than one match is returned,
@@ -143,16 +146,19 @@ class fuzzygeo:
         # Here, search for each city in address ngrams
         # of length equal to that of the city name
 
-        exact_match = self.find_exact_match(addr_string, cities, pops)
+        # exact_match = self.find_exact_match(addr_string, cities, pops)
 
-        if exact_match:
-            return exact_match
+        # if exact_match:
+        #     return exact_match
         
         addr_split = addr_string.split(' ')
-        potential_matches = [self.find_potential_match(addr_split, addr_string, c, p, threshold)
-                             for c,p in it.izip(cities, pops)
-                             if self.find_potential_match(addr_split, addr_string, c, p, threshold)
+        unique_ngrams = ngrams.drop_duplicates()
+        addr_ngrams = [self.compute_address_ngrams(addr_split, n) for n in unique_ngrams]
+        addr_ngrams = dict(zip(unique_ngrams, addr_ngrams))
+        potential_matches = [self.find_potential_match(addr_ngrams[cn], addr_string, c, cn, p, threshold)
+                             for c,cn,p in it.izip(cities, ngrams, pops)
                              ]
+        potential_matches = filter(None, potential_matches)
 
         # potential_matches = []
         # for c, p in zip(cities, pops):
@@ -188,7 +194,8 @@ class fuzzygeo:
     def id_state(self, addr_string):
         potential_states = self.re_states.search(addr_string)
         if potential_states:
-            return potential_states.group()
+            this_state = potential_states.group()
+            return this_state.strip()
         return None
 
     def __call__(self, addr, country, threshold):

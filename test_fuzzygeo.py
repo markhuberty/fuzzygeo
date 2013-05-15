@@ -7,11 +7,12 @@ city_db = pd.read_csv('latlong_dict.csv')
 city_db.columns = ['city', 'country', 'lat', 'lng', 'population', 'region']
 chicago_addr = '1023 n. clark chacago il'
 messy_addr = '1244 helsnky '
+helsinki_address = '1244 helsinki'
 
 city_db.population.fillna(0, inplace=True)
 city_db['region'] = [r.lower() if isinstance(r, str) else None for r in city_db.region]
 
-geocoder = fuzzygeo.fuzzygeo(city_db, 2)
+geocoder = fuzzygeo.fuzzygeo(city_db)
 
 # Illustrate that geocoding works
 chicago_latlng = geocoder(chicago_addr, 'us', 0.7)
