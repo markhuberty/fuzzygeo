@@ -12,7 +12,7 @@ helsinki_address = '1244 helsinki'
 city_db.population.fillna(0, inplace=True)
 city_db['region'] = [r.lower() if isinstance(r, str) else None for r in city_db.region]
 
-geocoder = fuzzygeo.fuzzygeo(city_db)
+us_geocoder = fuzzygeo.fuzzygeo(city_db[city_db.country=='us'])
 
 # Illustrate that geocoding works
 chicago_latlng = geocoder(chicago_addr, 'us', 0.7)

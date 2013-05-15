@@ -32,12 +32,13 @@ class fuzzygeo:
     """
     def __init__(self, city_df):
 
-        self.city_df = city_df.set_index('country')
+        self.city_df = city_df#.set_index('country')
         self.city_df['city_hash'] = [c[0] for c in self.city_df.city]
         self.city_df['city_ngram'] = [len(c.split(' ')) for c in self.city_df.city]
 
-        if 'us' in self.city_df.index:
-            self.states = self.city_df.ix['us'].region.drop_duplicates()
+        self.country = self.city_df.country.drop_duplicates()
+        if self.country == 'us':
+            self.states = self.city_df.region.drop_duplicates()
             self.states = [s.lower() for s in self.states]
             state_strlist = '|'.join(self.states)
             state_regexp = '\s(%s)\s{0,}$' % state_strlist
@@ -50,11 +51,6 @@ class fuzzygeo:
         
 
         """
-        try: 
-            region_df = self.city_df.ix[country]
-        except:
-            return '%s not a country in the database' % country
-
         addr = re_numbers.sub('', addr).strip()
         split_addr = re_multispace.split(addr)
         #addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
@@ -67,9 +63,9 @@ class fuzzygeo:
         # print city_chunk
         addr_candidates = split_addr #city_chunk.split(' ')
         hashed_addr = [w[0] for w in addr_candidates]
-        bool_addr = region_df.city_hash.isin(hashed_addr)
+        bool_addr = self.city_df.city_hash.isin(hashed_addr)
 
-        sub_df = region_df[bool_addr]
+        sub_df = self.city_df[bool_addr]
 
         #sub_df = region_df
         
