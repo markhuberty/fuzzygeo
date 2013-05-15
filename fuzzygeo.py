@@ -12,6 +12,8 @@ import re
 import time
 import itertools as it
 
+re_numbers = re.compile('[0-9]+')
+re_multispace = re.compile('\s+')
 
 class fuzzygeo:
     """
@@ -38,6 +40,9 @@ class fuzzygeo:
         if 'us' in self.city_df.index:
             self.states = self.city_df.ix['us'].region.drop_duplicates()
             self.states = [s.lower() for s in self.states]
+            state_strlist = '|'.join(self.states)
+            state_regexp = '\s(%s)\s{0,}$' % state_strlist
+            self.re_states = re.compile(state_regexp)
         
     def geocoder(self, addr, country, threshold):
         """
@@ -51,17 +56,17 @@ class fuzzygeo:
         except:
             return '%s not a country in the database' % country
 
-        addr = re.sub('[0-9]+', '', addr).strip()
-        split_addr = re.split('\s+', addr)
+        addr = re_numers.sub(addr).strip()
+        split_addr = re_multispace.split(addr)
         #addr = re.sub('^[0-9]+|[0-9]+$', '', addr).strip()
         #split_addr = re.split('[0-9]+', addr, maxsplit=1)
-        if isinstance(split_addr, str):
-            city_chunk = re.sub('[0-9]+', '', split_addr).strip()
-        else:
-            city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
-        city_chunk = re.sub('\s{2,}', ' ', city_chunk)
+        # if isinstance(split_addr, str):
+        #     city_chunk = re.sub('[0-9]+', '', split_addr).strip()
+        # else:
+        #     city_chunk = re.sub('[0-9]+', '', split_addr[-1]).strip()
+        # city_chunk = re.sub('\s{2,}', ' ', city_chunk)
         # print city_chunk
-        addr_candidates = city_chunk.split(' ')
+        addr_candidates = split_addr #city_chunk.split(' ')
         hashed_addr = [w[0] for w in addr_candidates]
 
         sub_df = region_df[region_df.city_hash.isin(hashed_addr)]
@@ -69,11 +74,13 @@ class fuzzygeo:
         
         # If the country is United States, subset by state
         if country=='us':
-            this_state = self.id_state(city_chunk)
+            this_state = self.id_state(addr)
 
             if this_state:
                 sub_df = sub_df[sub_df.region.isin([this_state])]
-                city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', city_chunk)
+                city_chunk = re.sub('\s' + this_state + '\s{0,}$', '', addr)
+            else:
+                city_chunk = addr
 
         if sub_df.shape[0] > 0:
             city_match = self.search_city(sub_df.city.values,
@@ -107,6 +114,7 @@ class fuzzygeo:
             return None
 
     def find_exact_match(self, addr, cities, pops):
+        print addr
         matches = []
         for c, p in it.izip(cities, pops):
             if c == addr:
@@ -115,7 +123,7 @@ class fuzzygeo:
                 m = re.search('\s%s(\s|$)' % c, addr)
                 if m:
                     matches.append((c, p, m.end()))
-
+        print matches
         if len(matches) > 1:
             sorted_matches = sorted(matches, key=lambda k: (k[1], k[2]))
             return sorted_matches[-1][0]
@@ -178,8 +186,10 @@ class fuzzygeo:
         return is_state
 
     def id_state(self, addr_string):
-        potential_states = [s for s in self.states if re.search('\s' + s + '\s{0,}$', addr_string)]
-        return potential_states[0]
+        potential_states = self.re_states.search(addr_string)
+        if potential_states:
+            return potential_states.group()
+        return None
 
     def __call__(self, addr, country, threshold):
         out = self.geocoder(addr, country, threshold)
