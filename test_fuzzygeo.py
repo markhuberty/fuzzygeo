@@ -13,10 +13,11 @@ city_db.population.fillna(0, inplace=True)
 city_db['region'] = [r.lower() if isinstance(r, str) else None for r in city_db.region]
 
 us_geocoder = fuzzygeo.fuzzygeo(city_db[city_db.country=='us'])
+fi_geocoder = fuzzygeo.fuzzygeo(city_db[city_db.country=='fi'])
 
 # Illustrate that geocoding works
-chicago_latlng = geocoder(chicago_addr, 'us', 0.7)
-helsinki_latlng = geocoder(messy_addr, 'fi', 0.7)
+chicago_latlng = us_geocoder(chicago_addr, 'us', 0.7)
+helsinki_latlng = fi_geocoder(messy_addr, 'fi', 0.7)
 
 # If we set the threshold too tight, nothing comes back
 no_return = geocoder(messy_addr, 0.9)
