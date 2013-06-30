@@ -14,10 +14,10 @@ Use
     # Assumes city_db has columns city, lat, lng
     city_db = pd.read_csv('city_database.csv')
     
-    geocoder = fuzzygeo.fuzzygeo(city_db, hash_length=3)
+    geocoder = fuzzygeo.fuzzygeo(city_db)
     
     address = '1234 n. clark chicago il'
-    geocoded_address = geocoder(address, threshold=0.75)
+    geocoded_address = geocoder(address, 'us', threshold=0.75)
 
 
 Depends
